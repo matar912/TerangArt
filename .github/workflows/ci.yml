@@ -1,0 +1,73 @@
+name: CI Laravel
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: terangart_db
+          POSTGRES_USER: docker
+          POSTGRES_PASSWORD: docker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U docker"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          extensions: pdo_pgsql, mbstring
+          coverage: none
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install Node dependencies
+        run: |
+          npm install
+          npm run build
+
+      - name: Setup Laravel
+        run: |
+          cp .env.example .env
+          echo "SESSION_DRIVER=file" >> .env
+          php artisan key:generate
+
+      - name: Run migrations
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_DATABASE: terangart_db
+          DB_USERNAME: docker
+          DB_PASSWORD: docker
+        run: php artisan migrate --force
+
+      - name: Run tests
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_DATABASE: terangart_db
+          DB_USERNAME: docker
+          DB_PASSWORD: docker
+        run: php artisan test
+
+      - name: Check Laravel
+        run: php artisan route:list
